@@ -5,6 +5,7 @@ jobs:
   ca-release:
     permissions:
       contents: write  # for helm/chart-releaser-action to push chart release and create a release
+      id-token: write  # for cosign keyless signing via OIDC
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,18 +21,47 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4.2.0
         with:
-          version: v3.4.0
+          version: v3.16.3
 
-      - env:
+      - name: Run chart-releaser
+        id: chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CR_RELEASE_NAME_TEMPLATE: "cluster-autoscaler-chart-{{ .Version }}"
-        name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: cluster-autoscaler/charts
+
+      - name: Install Cosign
+        if: steps.chart-releaser.outputs.changed_charts != ''
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign and upload Helm chart signatures
+        if: steps.chart-releaser.outputs.changed_charts != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for chart_pkg in .cr-release-packages/*.tgz; do
+            if [[ -f "$chart_pkg" ]]; then
+              chart_name=$(basename "$chart_pkg")
+              echo "Signing $chart_name..."
+
+              cosign sign-blob --yes "$chart_pkg" \
+                --bundle "${chart_pkg}.cosign.bundle"
+
+              base_name="${chart_name%.tgz}"
+              release_tag="cluster-autoscaler-chart-${base_name#cluster-autoscaler-}"
+
+              echo "Uploading signature bundle to release: $release_tag"
+              gh release upload "$release_tag" \
+                "${chart_pkg}.cosign.bundle" \
+                --clobber
+            fi
+          done
   vpa-release:
     permissions:
       contents: write  # for helm/chart-releaser-action to push chart release and create a release
+      id-token: write  # for cosign keyless signing via OIDC
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -47,15 +77,44 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4.2.0
         with:
-          version: v3.4.0
+          version: v3.16.3
 
-      - env:
+      - name: Run chart-releaser
+        id: chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CR_RELEASE_NAME_TEMPLATE: "vertical-pod-autoscaler-chart-{{ .Version }}"
-        name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: vertical-pod-autoscaler/charts
+
+      - name: Install Cosign
+        if: steps.chart-releaser.outputs.changed_charts != ''
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign and upload Helm chart signatures
+        if: steps.chart-releaser.outputs.changed_charts != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for chart_pkg in .cr-release-packages/*.tgz; do
+            if [[ -f "$chart_pkg" ]]; then
+              chart_name=$(basename "$chart_pkg")
+              echo "Signing $chart_name..."
+
+              cosign sign-blob --yes "$chart_pkg" \
+                --bundle "${chart_pkg}.cosign.bundle"
+
+              base_name="${chart_name%.tgz}"
+              release_tag="vertical-pod-autoscaler-chart-${base_name#vertical-pod-autoscaler-}"
+
+              echo "Uploading signature bundle to release: $release_tag"
+              gh release upload "$release_tag" \
+                "${chart_pkg}.cosign.bundle" \
+                --clobber
+            fi
+          done
+
 name: Release Charts
 on:
   push:

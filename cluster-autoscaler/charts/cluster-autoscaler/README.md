@@ -30,6 +30,40 @@ This chart bootstraps a cluster-autoscaler deployment on a [Kubernetes](http://k
 - Azure AKS specific Prerequisites:
   - Kubernetes 1.10+ with RBAC-enabled.
 
+## Chart Signature Verification
+
+All Helm chart releases are signed using [Sigstore/Cosign](https://docs.sigstore.dev/) keyless signing. This allows you to verify the authenticity and integrity of the chart before installation.
+
+### Prerequisites
+
+- [Cosign](https://docs.sigstore.dev/cosign/installation/) installed (v2.0+)
+
+### Verification Steps
+
+1. Download the chart package and signature bundle from the GitHub release:
+
+```console
+# Set the version you want to verify
+VERSION="9.54.0"
+
+# Download the chart package
+curl -LO "https://github.com/kubernetes/autoscaler/releases/download/cluster-autoscaler-chart-${VERSION}/cluster-autoscaler-${VERSION}.tgz"
+
+# Download the signature bundle
+curl -LO "https://github.com/kubernetes/autoscaler/releases/download/cluster-autoscaler-chart-${VERSION}/cluster-autoscaler-${VERSION}.tgz.cosign.bundle"
+```
+
+2. Verify the signature:
+
+```console
+cosign verify-blob cluster-autoscaler-${VERSION}.tgz \
+  --bundle cluster-autoscaler-${VERSION}.tgz.cosign.bundle \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  --certificate-identity-regexp "https://github.com/kubernetes/autoscaler/.github/workflows/chart-release.yaml@refs/heads/master"
+```
+
+A successful verification will output: `Verified OK`
+
 ## Previous Helm Chart
 
 The previous `cluster-autoscaler` Helm chart hosted at [helm/charts](https://github.com/helm/charts) has been moved to this repository in accordance with the [Deprecation timeline](https://github.com/helm/charts#deprecation-timeline). Note that a few things have changed between this version and the old version:
